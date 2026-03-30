@@ -1,0 +1,14 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# This is the ONLY file a developer needs to add.
+# Everything else is handled by the PaaGA platform.
+
+jobs:
+  deploy:
+    uses: bobbydeveaux/paaga/.github/workflows/platform.yml@main
+    secrets: inherit

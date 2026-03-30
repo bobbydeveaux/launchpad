@@ -1,0 +1,13 @@
+name: hello-paaga
+owner: bobbydeveaux
+
+frontend:
+  framework: react
+  dir: frontend
+
+backend:
+  language: python
+  dir: backend
+  port: 8080
+
+database: false
