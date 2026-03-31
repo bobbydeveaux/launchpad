@@ -2,12 +2,30 @@
 # Run ONCE per environment (dev / prod) to set up the shared platform project.
 # After this, individual apps require NO terraform — they just push code.
 
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 5.0"
+    }
+  }
+}
+
 locals {
   platform_project = var.platform_project
   region           = var.region
 }
 
 provider "google" {
+  project = local.platform_project
+  region  = local.region
+}
+
+provider "google-beta" {
   project = local.platform_project
   region  = local.region
 }
@@ -31,6 +49,15 @@ resource "google_project_service" "apis" {
 
   service            = each.value
   disable_on_destroy = false
+}
+
+# ── Firebase Project ──────────────────────────────────────────────────────────
+# Enable Firebase on the GCP project — required before any Firebase resources can be created.
+
+resource "google_firebase_project" "default" {
+  provider   = google-beta
+  project    = local.platform_project
+  depends_on = [google_project_service.apis]
 }
 
 # ── Artifact Registry ─────────────────────────────────────────────────────────
@@ -99,18 +126,4 @@ resource "google_service_account_iam_member" "wif_binding" {
   service_account_id = google_service_account.platform_cicd.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_owner/${var.github_owner}"
-}
-
-# ── Terraform State Bucket ────────────────────────────────────────────────────
-
-resource "google_storage_bucket" "tf_state" {
-  name          = "${local.platform_project}-tf-state"
-  location      = local.region
-  force_destroy = false
-
-  versioning {
-    enabled = true
-  }
-
-  uniform_bucket_level_access = true
 }
