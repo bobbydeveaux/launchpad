@@ -73,7 +73,7 @@ jobs:
         with:
           node-version: ${{ steps.node-version.outputs.version }}
           cache: npm
-          cache-dependency-path: ${{ inputs.frontend_dir }}/package-lock.json
+          cache-dependency-path: "**/package-lock.json"
 
       - name: Install & Build
         run: |
