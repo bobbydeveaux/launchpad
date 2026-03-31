@@ -7,10 +7,15 @@ provider "google" {
   region  = var.region
 }
 
+provider "google-beta" {
+  project = var.platform_project
+  region  = var.region
+}
+
 # ── Firebase Hosting Site ─────────────────────────────────────────────────────
 
 resource "google_firebase_hosting_site" "app" {
-  provider = google
+  provider = google-beta
   project  = var.platform_project
   site_id  = "${var.app_name}-${var.environment}"
 }
