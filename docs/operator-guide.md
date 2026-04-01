@@ -31,7 +31,7 @@ cp dev.tfvars.example dev.tfvars
 
 The script will:
 1. Check your `gcloud` auth and ADC
-2. Create the GCS state bucket via `gsutil` (so Terraform uses remote state from run 1)
+2. Create the GCS state bucket via `gsutil` (so Terraform uses remote state from run 1 — no local state ever)
 3. Write `backend.tf` pointing at that bucket
 4. Run `terraform init / plan / apply`
 5. Print the GitHub Variables to set
@@ -40,8 +40,9 @@ The bootstrap creates:
 - **Artifact Registry** (`stackramp-images`) — shared container registry
 - **Service Account** (`stackramp-cicd-sa`) — used by all app deployments
 - **Workload Identity Federation** (`stackramp-github-pool`) — secretless auth from GitHub Actions
-- **IAM bindings** — Cloud Run, Firebase, Artifact Registry, Secret Manager permissions
+- **IAM bindings** — Cloud Run, Firebase, Artifact Registry, Secret Manager, Cloud DNS permissions
 - **GCS bucket** (`{project}-tf-state`) — Terraform state for bootstrap and all app deployments
+- **Cloud DNS zone** — created if `base_domain` is set in tfvars
 
 ### Setting GitHub Variables
 
@@ -55,7 +56,69 @@ STACKRAMP_WIF_PROVIDER=<from terraform output>
 STACKRAMP_SA_EMAIL=<from terraform output>
 ```
 
-The script prints these values at the end. Setting them at the org level means all repos in the org can deploy automatically.
+If you set a `base_domain`, also set:
+
+```
+STACKRAMP_BASE_DOMAIN=myapp.io
+STACKRAMP_DNS_ZONE=myapp-io
+```
+
+The bootstrap script prints all of these values at the end. Setting them at the org level means all repos in the org can deploy automatically.
+
+---
+
+## Custom Domains
+
+StackRamp supports two modes of custom domain assignment:
+
+### Option A: Explicit domain (per app)
+
+Set `domain:` in the app's `stackramp.yaml`:
+
+```yaml
+name: my-app
+domain: myapp.io
+```
+
+### Option B: Auto-subdomains via BASE_DOMAIN (recommended for platforms)
+
+Set `base_domain` in your bootstrap tfvars and `STACKRAMP_BASE_DOMAIN` + `STACKRAMP_DNS_ZONE` as GitHub Variables. Every app then automatically gets `{app-name}.{base_domain}` with no extra config in `stackramp.yaml`.
+
+For example, with `STACKRAMP_BASE_DOMAIN=myorg.io`:
+- `name: dashboard` → `dashboard.myorg.io`
+- `name: api` → `api.myorg.io`
+
+### How domain verification works automatically
+
+Because Cloud DNS is fully authoritative (nameservers delegated to Google), StackRamp closes the Firebase domain verification loop entirely inside Terraform:
+
+```
+terraform apply (provision job)
+  → creates google_firebase_hosting_custom_domain
+  → Firebase generates required_dns_updates (TXT ownership proof + A records)
+  → Terraform reads required_dns_updates
+  → creates TXT record in Cloud DNS  ← Firebase polls this and auto-verifies
+  → creates A record in Cloud DNS    ← traffic routed to Firebase CDN
+```
+
+No manual Firebase Console steps. No copy-pasting verification records.
+
+> **Note on first deploys:** Firebase verification is asynchronous. On the very first deploy for a new domain, the TXT record gets written but Firebase may not have returned A records yet. The next push (or re-run) will add the A record once Firebase has verified. This is safe and handled automatically — `terraform apply` is idempotent.
+
+### Nameserver delegation (one-time)
+
+After bootstrap, point your domain registrar's nameservers at the values printed by the bootstrap script:
+
+```
+ns-cloud-c1.googledomains.com.
+ns-cloud-c2.googledomains.com.
+ns-cloud-c3.googledomains.com.
+ns-cloud-c4.googledomains.com.
+```
+
+This is a one-time step. Once done, all subdomains are covered — new apps verify automatically without any further registrar interaction.
+
+---
 
 ## Managing Apps
 
@@ -64,9 +127,8 @@ The script prints these values at the end. Setting them at the org level means a
 When a developer pushes code with a `stackramp.yaml`, the platform:
 1. Parses the config
 2. Detects what changed (frontend/backend/both)
-3. Builds and deploys only what changed
-
-Infrastructure is created idempotently — running it multiple times is safe.
+3. Provisions infra idempotently (safe to run multiple times)
+4. Builds and deploys only what changed
 
 ### Naming Conventions
 
@@ -82,8 +144,10 @@ All resources follow a consistent naming scheme within the shared project:
 ### Monitoring
 
 - **Cloud Run**: GCP Console → Cloud Run → view services, logs, metrics
-- **Firebase Hosting**: Firebase Console → Hosting → view sites, release history
+- **Firebase Hosting**: Firebase Console → Hosting → view sites, release history, custom domain status
 - **Artifact Registry**: GCP Console → Artifact Registry → view images
+
+---
 
 ## Multi-Environment Setup
 
@@ -104,6 +168,8 @@ cp prod.tfvars.example prod.tfvars  # edit with prod project details
 Set the GitHub Variables from each environment's outputs at the appropriate scope (org-level for shared, repo-level to override per repo).
 
 The platform workflow automatically deploys to dev on every push and promotes to prod on main branch pushes.
+
+---
 
 ## Security Model
 

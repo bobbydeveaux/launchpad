@@ -7,6 +7,8 @@
 ```yaml
 name: my-app
 
+domain: my-app.io   # optional — explicit custom domain
+
 frontend:
   framework: react
   dir: frontend
@@ -23,6 +25,24 @@ database: false
 ```
 
 ## Fields
+
+### `domain` (optional)
+
+| | |
+|---|---|
+| Type | `string` |
+| Pattern | `^([a-z0-9-]+\.)+[a-z]{2,}$` |
+| Example | `myapp.io`, `dashboard.myorg.io` |
+
+Custom domain for this app. Supports both root domains and subdomains.
+
+If omitted and the platform has `STACKRAMP_BASE_DOMAIN` configured, the app automatically gets `{name}.{STACKRAMP_BASE_DOMAIN}` (e.g. `my-app.myorg.io`).
+
+If neither is set, the app is served on the default Firebase Hosting URL (`{site-id}.web.app`).
+
+Domain verification is fully automatic — because StackRamp manages Cloud DNS, it injects the required TXT and A records itself with no manual steps.
+
+---
 
 ### `name` (required)
 
