@@ -25,7 +25,7 @@ output "stackramp_sa_email" {
 
 output "artifact_registry_url" {
   description = "Docker registry URL for images"
-  value       = "${google_artifact_registry_repository.launchpad_images.location}-docker.pkg.dev/${var.platform_project}/${google_artifact_registry_repository.launchpad_images.repository_id}"
+  value       = "${google_artifact_registry_repository.stackramp_images.location}-docker.pkg.dev/${var.platform_project}/${google_artifact_registry_repository.stackramp_images.repository_id}"
 }
 
 output "dns_zone_nameservers" {

@@ -1,4 +1,4 @@
-# Launchpad default Go Dockerfile
+# StackRamp default Go Dockerfile
 # Multi-stage build for production-ready Go apps
 
 FROM golang:1.22-alpine AS builder

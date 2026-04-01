@@ -1,4 +1,4 @@
-# Launchpad Per-App Infrastructure
+# StackRamp Per-App Infrastructure
 # Run idempotently on every deploy to ensure app infra exists.
 # Creates Firebase Hosting site + Cloud Run service for the app.
 

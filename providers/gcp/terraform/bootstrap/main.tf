@@ -1,4 +1,4 @@
-# Launchpad Platform Bootstrap
+# StackRamp Platform Bootstrap
 # Run ONCE per environment (dev / prod) to set up the shared platform project.
 # After this, individual apps require NO terraform — they just push code.
 
@@ -62,9 +62,9 @@ resource "google_firebase_project" "default" {
 }
 
 # ── Artifact Registry ─────────────────────────────────────────────────────────
-# All apps share one registry: launchpad-images/<app-name>:<sha>
+# All apps share one registry: stackramp-images/<app-name>:<sha>
 
-resource "google_artifact_registry_repository" "launchpad_images" {
+resource "google_artifact_registry_repository" "stackramp_images" {
   location      = local.region
   repository_id = "stackramp-images"
   format        = "DOCKER"
@@ -76,8 +76,8 @@ resource "google_artifact_registry_repository" "launchpad_images" {
 # This SA is used by ALL apps' GitHub Actions — no per-app SA needed
 
 resource "google_service_account" "platform_cicd" {
-  account_id   = "launchpad-cicd-sa"
-  display_name = "Launchpad Platform CI/CD"
+  account_id   = "stackramp-cicd-sa"
+  display_name = "StackRamp Platform CI/CD"
   description  = "Shared SA for all app deployments via GitHub Actions"
 }
 
@@ -102,8 +102,8 @@ resource "google_project_iam_member" "platform_roles" {
 # ONE pool for the whole platform — all repos in the org can use it
 
 resource "google_iam_workload_identity_pool" "github" {
-  workload_identity_pool_id = "launchpad-github-pool"
-  display_name              = "Launchpad GitHub Actions"
+  workload_identity_pool_id = "stackramp-github-pool"
+  display_name              = "StackRamp GitHub Actions"
   depends_on                = [google_project_service.apis]
 }
 

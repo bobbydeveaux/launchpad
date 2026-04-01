@@ -1,4 +1,4 @@
-# Launchpad default Node.js Dockerfile
+# StackRamp default Node.js Dockerfile
 # Multi-stage build for production-ready Node apps
 
 FROM node:20-alpine AS builder

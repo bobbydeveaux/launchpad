@@ -1,4 +1,4 @@
-# Launchpad default Python Dockerfile
+# StackRamp default Python Dockerfile
 # Multi-stage build for production-ready Python apps
 
 FROM python:3.12-slim AS builder

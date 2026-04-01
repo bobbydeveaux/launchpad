@@ -1,7 +1,10 @@
-# launchpad.yaml — drop this in your repo root
-# Full reference: https://github.com/bobbydeveaux/launchpad/blob/main/docs/launchpad-yaml-reference.md
+# stackramp.yaml — drop this in your repo root
+# Full reference: https://github.com/bobbydeveaux/stackramp/blob/main/docs/stackramp-yaml-reference.md
 
 name: my-app           # slug — used for service names, URLs, etc.
+
+# domain: my-app.io   # optional — explicit custom domain
+                       # omit to use {name}.{STACKRAMP_BASE_DOMAIN} if configured
 
 frontend:
   framework: react     # react | vue | next | static | none
