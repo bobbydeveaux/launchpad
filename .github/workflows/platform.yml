@@ -67,10 +67,10 @@ jobs:
           filters: |
             frontend:
               - '${{ steps.config.outputs.frontend_dir }}/**'
-              - 'stackramp.yaml'
+              - '${{ inputs.config_path }}'
             backend:
               - '${{ steps.config.outputs.backend_dir }}/**'
-              - 'stackramp.yaml'
+              - '${{ inputs.config_path }}'
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 2. Provision app infrastructure (idempotent)
