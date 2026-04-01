@@ -39,7 +39,14 @@ resource "google_dns_record_set" "frontend_a" {
   ttl          = 300
   managed_zone = var.dns_zone_name
   project      = var.platform_project
-  rrdatas      = google_firebase_hosting_custom_domain.app[0].required_dns_updates[0].desired[*].records[0]
+  rrdatas = flatten([
+    for update in google_firebase_hosting_custom_domain.app[0].required_dns_updates : [
+      for desired in update.desired : [
+        for record in desired.records : record.rdata
+        if record.type == "A"
+      ]
+    ]
+  ])
 }
 
 resource "google_dns_record_set" "frontend_txt" {
@@ -49,7 +56,14 @@ resource "google_dns_record_set" "frontend_txt" {
   ttl          = 300
   managed_zone = var.dns_zone_name
   project      = var.platform_project
-  rrdatas      = [for r in google_firebase_hosting_custom_domain.app[0].required_dns_updates : r.desired[0].records[0] if r.desired[0].domain_name == var.custom_domain && try(r.desired[0].type, "") == "TXT"]
+  rrdatas = flatten([
+    for update in google_firebase_hosting_custom_domain.app[0].required_dns_updates : [
+      for desired in update.desired : [
+        for record in desired.records : record.rdata
+        if record.type == "TXT"
+      ]
+    ]
+  ])
 }
 
 # ── Cloud Run Service ─────────────────────────────────────────────────────────
