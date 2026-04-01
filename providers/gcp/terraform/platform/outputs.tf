@@ -4,6 +4,6 @@ output "frontend_url" {
 }
 
 output "backend_url" {
-  description = "Backend URL — custom domain if configured, otherwise raw Cloud Run URI"
-  value       = var.backend_domain != "" ? "https://${var.backend_domain}" : google_cloud_run_v2_service.app.uri
+  description = "Backend Cloud Run URI"
+  value       = google_cloud_run_v2_service.app.uri
 }
