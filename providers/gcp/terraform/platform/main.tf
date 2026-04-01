@@ -44,19 +44,11 @@ locals {
   # We hardcode them so the A record is never destroyed once created, even after
   # Firebase considers verification complete and required_dns_updates goes empty.
   firebase_a_records = ["199.36.158.100", "199.36.158.101"]
-
-  # TXT records are only needed during domain ownership verification.
-  # Once Firebase verifies, required_dns_updates goes empty and we remove them.
-  txt_records = local.dns_enabled ? flatten([
-    for update in google_firebase_hosting_custom_domain.app[0].required_dns_updates : [
-      for desired in update.desired : [
-        for record in desired.records : record.rdata
-        if record.type == "TXT"
-      ]
-    ]
-  ]) : []
 }
 
+# A record points the custom domain at Firebase's stable load-balancer IPs.
+# Firebase verifies ownership automatically once the A record resolves —
+# no separate TXT record required for subdomains of an already-verified apex.
 resource "google_dns_record_set" "frontend_a" {
   count        = local.dns_enabled ? 1 : 0
   name         = "${var.custom_domain}."
@@ -65,16 +57,6 @@ resource "google_dns_record_set" "frontend_a" {
   managed_zone = var.dns_zone_name
   project      = var.platform_project
   rrdatas      = local.firebase_a_records
-}
-
-resource "google_dns_record_set" "frontend_txt" {
-  count        = local.dns_enabled && length(local.txt_records) > 0 ? 1 : 0
-  name         = "${var.custom_domain}."
-  type         = "TXT"
-  ttl          = 300
-  managed_zone = var.dns_zone_name
-  project      = var.platform_project
-  rrdatas      = local.txt_records
 }
 
 # ── Cloud Run Service ─────────────────────────────────────────────────────────
