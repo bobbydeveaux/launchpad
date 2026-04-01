@@ -12,12 +12,28 @@ provider "google-beta" {
   region  = var.region
 }
 
+provider "random" {}
+
 # ── Firebase Hosting Site ─────────────────────────────────────────────────────
+# Firebase site IDs are globally unique. A random suffix avoids collisions
+# with other projects or previously deleted sites (30-day hold after deletion).
+# ignore_changes = [site_id] ensures existing sites are never recreated —
+# only new sites get the suffix stamped at first creation.
+
+resource "random_string" "site_suffix" {
+  length  = 5
+  special = false
+  upper   = false
+}
 
 resource "google_firebase_hosting_site" "app" {
   provider = google-beta
   project  = var.platform_project
-  site_id  = "${var.app_name}-${var.environment}"
+  site_id  = "${var.app_name}-${random_string.site_suffix.result}-${var.environment}"
+
+  lifecycle {
+    ignore_changes = [site_id]
+  }
 }
 
 # ── Custom Domain ─────────────────────────────────────────────────────────────
