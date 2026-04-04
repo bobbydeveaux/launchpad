@@ -100,19 +100,20 @@ jobs:
 
       - name: Create firebase.json
         run: |
-          SERVICE_NAME="${{ inputs.site_id != '' && inputs.site_id || format('{0}-{1}', inputs.app_name, inputs.environment) }}"
+          SITE_NAME="${{ inputs.site_id != '' && inputs.site_id || format('{0}-{1}', inputs.app_name, inputs.environment) }}"
+          CLOUD_RUN_SERVICE="${{ inputs.app_name }}-${{ inputs.environment }}"
           if [ "${{ inputs.has_backend }}" = "true" ]; then
             cat > firebase.json << EOF
           {
             "hosting": {
-              "site": "${SERVICE_NAME}",
+              "site": "${SITE_NAME}",
               "public": "${{ inputs.frontend_dir }}/dist",
               "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
               "rewrites": [
                 {
                   "source": "/api/**",
                   "run": {
-                    "serviceId": "${SERVICE_NAME}",
+                    "serviceId": "${CLOUD_RUN_SERVICE}",
                     "region": "${{ inputs.region }}"
                   }
                 }
@@ -124,7 +125,7 @@ jobs:
             cat > firebase.json << EOF
           {
             "hosting": {
-              "site": "${SERVICE_NAME}",
+              "site": "${SITE_NAME}",
               "public": "${{ inputs.frontend_dir }}/dist",
               "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
             }
