@@ -159,6 +159,7 @@ jobs:
             --set-env-vars="${ENV_VARS}" \
             --memory=${{ inputs.memory }} \
             --cpu=${{ inputs.cpu }} \
+            --min-instances=1 \
             --max-instances=10 \
             --timeout=300 \
             --cpu-throttling \
