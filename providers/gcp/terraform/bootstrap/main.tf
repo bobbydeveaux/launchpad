@@ -180,7 +180,8 @@ resource "google_sql_database_instance" "platform" {
   region           = var.region
 
   settings {
-    tier = var.postgres_tier
+    tier    = var.postgres_tier
+    edition = "ENTERPRISE"
 
     backup_configuration {
       enabled = true
