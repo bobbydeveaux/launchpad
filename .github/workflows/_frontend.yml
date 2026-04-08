@@ -138,7 +138,8 @@ jobs:
             --region="${{ inputs.region }}" \
             --platform=managed \
             --port=8080 \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
+            --ingress=internal-and-cloud-load-balancing \
             --project="${{ inputs.platform_project }}"
           URL="${{ inputs.custom_domain != '' && format('https://{0}', inputs.custom_domain) || '' }}"
           echo "url=$URL" >> $GITHUB_OUTPUT

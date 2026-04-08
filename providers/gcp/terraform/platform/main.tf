@@ -168,12 +168,18 @@ resource "google_cloud_run_v2_service" "frontend_sso" {
 
   template {
     containers {
-      image = "nginx:alpine"
+      image = "nginxinc/nginx-unprivileged:alpine"
       ports {
         container_port = 8080
       }
     }
+    # Only accept traffic from the HTTPS Load Balancer — IAP enforces authn there
+    scaling {
+      min_instance_count = 0
+    }
   }
+
+  ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
   lifecycle {
     ignore_changes = [
@@ -182,24 +188,14 @@ resource "google_cloud_run_v2_service" "frontend_sso" {
   }
 }
 
-# IAP SA invoker on backend (replaces allUsers)
-resource "google_cloud_run_v2_service_iam_member" "iap_backend_invoker" {
-  count    = var.has_sso ? 1 : 0
-  project  = var.platform_project
-  location = var.region
-  name     = google_cloud_run_v2_service.app.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
-}
-
-# IAP SA invoker on frontend
+# Allow unauthenticated invocations — security is enforced by LB ingress restriction + IAP
 resource "google_cloud_run_v2_service_iam_member" "iap_frontend_invoker" {
   count    = var.has_sso ? 1 : 0
   project  = var.platform_project
   location = var.region
   name     = google_cloud_run_v2_service.frontend_sso[0].name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
+  member   = "allUsers"
 }
 
 # Read IAP credentials from Secret Manager (created at bootstrap)
