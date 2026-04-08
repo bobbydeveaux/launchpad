@@ -75,6 +75,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout StackRamp platform
+        if: inputs.sso == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: bobbydeveaux/stackramp
+          ref: feat/sso-iap
+          path: .stackramp
+
       - name: Authenticate to Google Cloud
         uses: bobbydeveaux/stackramp/providers/gcp/workflows/auth@main
         with:
