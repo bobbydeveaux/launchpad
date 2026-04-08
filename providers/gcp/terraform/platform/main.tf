@@ -252,6 +252,7 @@ resource "google_compute_backend_service" "frontend_bs" {
   }
 
   iap {
+    enabled              = true
     oauth2_client_id     = data.google_secret_manager_secret_version.iap_client_id[0].secret_data
     oauth2_client_secret = data.google_secret_manager_secret_version.iap_client_secret[0].secret_data
   }
@@ -269,6 +270,7 @@ resource "google_compute_backend_service" "backend_bs" {
   }
 
   iap {
+    enabled              = true
     oauth2_client_id     = data.google_secret_manager_secret_version.iap_client_id[0].secret_data
     oauth2_client_secret = data.google_secret_manager_secret_version.iap_client_secret[0].secret_data
   }
