@@ -107,6 +107,13 @@ jobs:
           wif_provider: ${{ vars.STACKRAMP_WIF_PROVIDER }}
           service_account: ${{ vars.STACKRAMP_SA_EMAIL }}
 
+      - name: Provision IAP service identity (SSO only)
+        if: needs.parse-config.outputs.has_sso == 'true'
+        run: |
+          gcloud beta services identity create \
+            --service=iap.googleapis.com \
+            --project=${{ vars.STACKRAMP_PROJECT }} 2>&1 || true
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
