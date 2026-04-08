@@ -168,6 +168,15 @@ print_info "Applying..."
 terraform apply -var-file="$TFVARS_FILE" -auto-approve
 print_success "Bootstrap resources deployed!"
 
+# ── Provision IAP service identity ────────────────────────────────────────────
+# The IAP SA (service-PROJECT_NUMBER@gcp-sa-iap.iam.gserviceaccount.com) must
+# exist before any SSO app can deploy. Create it idempotently here.
+if grep -q 'iap_allowed_domain' "$TFVARS_FILE" 2>/dev/null; then
+  print_info "Provisioning IAP service identity..."
+  gcloud beta services identity create --service=iap.googleapis.com --project="$PROJECT_ID" 2>&1 | grep -v "already exists" || true
+  print_success "IAP service identity ready"
+fi
+
 # ── Outputs ───────────────────────────────────────────────────────────────────
 echo
 print_success "📤 Terraform outputs:"

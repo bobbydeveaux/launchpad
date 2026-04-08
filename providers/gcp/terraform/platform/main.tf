@@ -198,6 +198,25 @@ resource "google_cloud_run_v2_service_iam_member" "iap_frontend_invoker" {
   member   = "allUsers"
 }
 
+# IAP SA invoker on backend — IAP requires run.invoker even when Cloud Run allows allUsers
+resource "google_cloud_run_v2_service_iam_member" "iap_backend_invoker" {
+  count    = var.has_sso ? 1 : 0
+  project  = var.platform_project
+  location = var.region
+  name     = google_cloud_run_v2_service.app.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "iap_frontend_invoker_sa" {
+  count    = var.has_sso ? 1 : 0
+  project  = var.platform_project
+  location = var.region
+  name     = google_cloud_run_v2_service.frontend_sso[0].name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
 # Read IAP credentials from Secret Manager (created at bootstrap)
 data "google_secret_manager_secret_version" "iap_client_id" {
   count   = var.has_sso ? 1 : 0
