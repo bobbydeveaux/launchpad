@@ -55,3 +55,21 @@ variable "postgres_tier" {
   type        = string
   default     = "db-f1-micro"
 }
+
+variable "iap_allowed_domain" {
+  description = "Google Workspace domain whose members are granted IAP access (e.g. yourcompany.com). Use * for any Google account. Leave empty to skip IAP setup."
+  type        = string
+  default     = ""
+}
+
+variable "iap_support_email" {
+  description = "Support email shown on the IAP consent screen. Required when iap_allowed_domain is set."
+  type        = string
+  default     = ""
+}
+
+variable "iap_application_title" {
+  description = "Application title shown on the IAP consent screen."
+  type        = string
+  default     = "StackRamp"
+}

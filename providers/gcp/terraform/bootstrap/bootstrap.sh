@@ -180,6 +180,7 @@ print_info "Next steps:"
 echo "   1. Set these as GitHub Variables (org or repo → Settings → Actions → Variables):"
 echo
 BASE_DOMAIN=$(grep 'base_domain' "$TFVARS_FILE" | cut -d'"' -f2)
+IAP_DOMAIN=$(grep 'iap_allowed_domain' "$TFVARS_FILE" | grep -v '^#' | cut -d'"' -f2)
 terraform output -json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
@@ -195,6 +196,9 @@ if base_domain:
 cloudsql = data.get('cloudsql_connection_name', {}).get('value', '')
 if cloudsql:
     print(f'      STACKRAMP_CLOUDSQL_CONNECTION  = {cloudsql}')
+iap_domain = '${IAP_DOMAIN}'
+if iap_domain:
+    print(f'      STACKRAMP_IAP_DOMAIN           = {iap_domain}')
 ns = data.get('dns_zone_nameservers', {}).get('value', [])
 if ns:
     print()

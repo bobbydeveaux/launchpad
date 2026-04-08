@@ -46,6 +46,8 @@ resource "google_project_service" "apis" {
     "storage.googleapis.com",
     "cloudbuild.googleapis.com",
     "dns.googleapis.com",
+    "compute.googleapis.com",
+    "iap.googleapis.com",
   ])
 
   service            = each.value
@@ -91,6 +93,8 @@ resource "google_project_iam_member" "platform_roles" {
     "roles/cloudsql.admin",
     "roles/storage.admin",
     "roles/dns.admin",
+    "roles/compute.loadBalancerAdmin",
+    "roles/iap.admin",
   ])
 
   project = local.platform_project
@@ -200,4 +204,72 @@ resource "google_service_account_iam_member" "wif_binding" {
   service_account_id = google_service_account.platform_cicd.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_owner/${var.github_owner}"
+}
+
+# ── IAP Brand + Client ────────────────────────────────────────────────────────
+# One brand and one OAuth client per platform. Apps opt in via `sso: true` in
+# stackramp.yaml. The platform team controls access via iap_allowed_domain.
+# Note: Only one IAP brand is allowed per GCP project. If one already exists,
+# import it: terraform import google_iap_brand.platform projects/{project}/brands/{brand_id}
+
+resource "google_iap_brand" "platform" {
+  count             = var.iap_allowed_domain != "" ? 1 : 0
+  support_email     = var.iap_support_email
+  application_title = var.iap_application_title
+  project           = local.platform_project
+  depends_on        = [google_project_service.apis]
+}
+
+resource "google_iap_client" "platform" {
+  count        = var.iap_allowed_domain != "" ? 1 : 0
+  display_name = "StackRamp IAP"
+  brand        = google_iap_brand.platform[0].name
+}
+
+# Store IAP credentials in Secret Manager so platform terraform can read them
+# at app provision time without them ever appearing in workflow logs.
+
+resource "google_secret_manager_secret" "iap_client_id" {
+  count     = var.iap_allowed_domain != "" ? 1 : 0
+  secret_id = "stackramp-iap-client-id"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "iap_client_id" {
+  count       = var.iap_allowed_domain != "" ? 1 : 0
+  secret      = google_secret_manager_secret.iap_client_id[0].id
+  secret_data = google_iap_client.platform[0].client_id
+}
+
+resource "google_secret_manager_secret" "iap_client_secret" {
+  count     = var.iap_allowed_domain != "" ? 1 : 0
+  secret_id = "stackramp-iap-client-secret"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "iap_client_secret" {
+  count       = var.iap_allowed_domain != "" ? 1 : 0
+  secret      = google_secret_manager_secret.iap_client_secret[0].id
+  secret_data = google_iap_client.platform[0].client_secret
+}
+
+# Grant the CICD SA access to read IAP credentials during app provisioning
+resource "google_secret_manager_secret_iam_member" "iap_client_id_access" {
+  count     = var.iap_allowed_domain != "" ? 1 : 0
+  secret_id = google_secret_manager_secret.iap_client_id[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.platform_cicd.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "iap_client_secret_access" {
+  count     = var.iap_allowed_domain != "" ? 1 : 0
+  secret_id = google_secret_manager_secret.iap_client_secret[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.platform_cicd.email}"
 }
