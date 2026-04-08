@@ -151,23 +151,44 @@ All resources follow a consistent naming scheme within the shared project:
 
 ## Multi-Environment Setup
 
-Each environment has its own tfvars file and its own GCP project. Run bootstrap once per environment:
+> **Current limitation:** The platform currently uses a single set of GitHub Variables (`STACKRAMP_PROJECT`, `STACKRAMP_WIF_PROVIDER`, etc.) with no `_DEV` / `_PROD` suffix. This means both dev and prod app deployments target the same GCP project. This is fine for early-stage platforms but is a known gap — see the roadmap below.
+
+### Current state (single platform project)
+
+One `bootstrap.sh dev` run, one GCP project, one set of GitHub Variables. Both dev and prod *app* environments (`my-app-dev`, `my-app-prod`) are created inside the same GCP project. Resource isolation is by naming convention only.
+
+This is the simplest setup and works well until you need billing separation, stricter IAM boundaries, or prod-grade reliability SLAs.
+
+### Target state (separate platform projects per environment)
+
+Each environment gets its own GCP project and its own bootstrap:
 
 ```bash
 cd providers/gcp/terraform/bootstrap
 
-# Dev
-cp dev.tfvars.example dev.tfvars   # edit with dev project details
+# Dev platform
+cp terraform.tfvars.example dev.tfvars   # edit with dev project
 ./bootstrap.sh dev
 
-# Prod
-cp prod.tfvars.example prod.tfvars  # edit with prod project details
+# Prod platform
+cp terraform.tfvars.example prod.tfvars  # edit with prod project
 ./bootstrap.sh prod
 ```
 
-Set the GitHub Variables from each environment's outputs at the appropriate scope (org-level for shared, repo-level to override per repo).
+The GitHub Variables would then be namespaced:
 
-The platform workflow automatically deploys to dev on every push and promotes to prod on main branch pushes.
+```
+STACKRAMP_PROJECT_DEV       = my-platform-dev
+STACKRAMP_PROJECT_PROD      = my-platform-prod
+STACKRAMP_WIF_PROVIDER_DEV  = projects/.../providers/github-provider
+STACKRAMP_WIF_PROVIDER_PROD = projects/.../providers/github-provider
+STACKRAMP_SA_EMAIL_DEV      = stackramp-cicd-sa@my-platform-dev.iam...
+STACKRAMP_SA_EMAIL_PROD     = stackramp-cicd-sa@my-platform-prod.iam...
+```
+
+And `platform.yml` would use `_DEV` vars for dev deployments and `_PROD` vars for prod deployments — proper isolation, separate billing, separate Cloud SQL instances.
+
+**This is not yet implemented.** The platform workflow uses the unsuffixed variable names. Implementing it requires updating `platform.yml` to conditionally switch variable sets based on environment. Tracked as a future enhancement.
 
 ---
 
