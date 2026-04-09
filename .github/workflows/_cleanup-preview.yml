@@ -35,6 +35,9 @@ jobs:
           wif_provider: ${{ vars.STACKRAMP_WIF_PROVIDER }}
           service_account: ${{ vars.STACKRAMP_SA_EMAIL }}
 
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
       - name: Delete preview Cloud Run services
         run: |
           APP_NAME="${{ steps.config.outputs.app_name }}"
@@ -60,6 +63,6 @@ jobs:
           firebase hosting:channel:delete "pr-${PR_NUM}" \
             --site "$SITE_ID" \
             --project "$PROJECT" \
-            --force 2>/dev/null || true
+            --force || echo "Warning: could not delete Firebase preview channel"
 
           echo "Preview cleanup complete for PR #${PR_NUM}"
