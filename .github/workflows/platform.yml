@@ -224,7 +224,7 @@ jobs:
       app_name: ${{ needs.parse-config.outputs.app_name }}
       frontend_dir: ${{ needs.parse-config.outputs.frontend_dir }}
       frontend_framework: ${{ needs.parse-config.outputs.frontend_framework }}
-      environment: ${{ github.event_name == 'pull_request' && 'preview' || 'dev' }}
+      environment: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'dev' }}
       platform_project: ${{ vars.STACKRAMP_PROJECT }}
       region: ${{ vars.STACKRAMP_REGION || 'europe-west1' }}
       wif_provider: ${{ vars.STACKRAMP_WIF_PROVIDER }}
@@ -252,7 +252,7 @@ jobs:
       backend_dir: ${{ needs.parse-config.outputs.backend_dir }}
       backend_language: ${{ needs.parse-config.outputs.backend_language }}
       backend_port: ${{ fromJson(needs.parse-config.outputs.backend_port) }}
-      environment: ${{ github.event_name == 'pull_request' && 'preview' || 'dev' }}
+      environment: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'dev' }}
       platform_project: ${{ vars.STACKRAMP_PROJECT }}
       region: ${{ vars.STACKRAMP_REGION || 'europe-west1' }}
       wif_provider: ${{ vars.STACKRAMP_WIF_PROVIDER }}

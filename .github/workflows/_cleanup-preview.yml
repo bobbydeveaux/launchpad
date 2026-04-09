@@ -1,0 +1,65 @@
+name: "Cleanup Preview Environment"
+
+# Reusable workflow — called by consuming repos on PR close.
+# Deletes the Cloud Run preview services created for the PR.
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: "Path to stackramp.yaml"
+        type: string
+        required: false
+        default: "stackramp.yaml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup:
+    name: Cleanup PR preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse config
+        id: config
+        uses: bobbydeveaux/stackramp/platform-action@main
+        with:
+          config_path: ${{ inputs.config_path }}
+
+      - name: Authenticate to Google Cloud
+        uses: bobbydeveaux/stackramp/providers/gcp/workflows/auth@main
+        with:
+          wif_provider: ${{ vars.STACKRAMP_WIF_PROVIDER }}
+          service_account: ${{ vars.STACKRAMP_SA_EMAIL }}
+
+      - name: Delete preview Cloud Run services
+        run: |
+          APP_NAME="${{ steps.config.outputs.app_name }}"
+          REGION="${{ vars.STACKRAMP_REGION || 'europe-west1' }}"
+          PROJECT="${{ vars.STACKRAMP_PROJECT }}"
+          PR_NUM="${{ github.event.number }}"
+          ENV="pr-${PR_NUM}"
+
+          # Delete backend preview service (if it exists)
+          if gcloud run services describe "${APP_NAME}-${ENV}" --region="$REGION" --project="$PROJECT" 2>/dev/null; then
+            echo "Deleting backend preview: ${APP_NAME}-${ENV}"
+            gcloud run services delete "${APP_NAME}-${ENV}" --region="$REGION" --project="$PROJECT" --quiet
+          fi
+
+          # Delete frontend SSO preview service (if it exists)
+          if gcloud run services describe "${APP_NAME}-fe-${ENV}" --region="$REGION" --project="$PROJECT" 2>/dev/null; then
+            echo "Deleting frontend SSO preview: ${APP_NAME}-fe-${ENV}"
+            gcloud run services delete "${APP_NAME}-fe-${ENV}" --region="$REGION" --project="$PROJECT" --quiet
+          fi
+
+          # Delete Firebase preview channel (if it exists)
+          SITE_ID="${APP_NAME}-dev"
+          firebase hosting:channel:delete "pr-${PR_NUM}" \
+            --site "$SITE_ID" \
+            --project "$PROJECT" \
+            --force 2>/dev/null || true
+
+          echo "Preview cleanup complete for PR #${PR_NUM}"

@@ -192,8 +192,19 @@ func parseService(svc *runpb.Service) ServiceInfo {
 }
 
 // splitServiceName parses "{app}-{env}" or "{app}-fe-{env}" patterns.
+// Recognises dev, prod, and pr-N (PR preview) environments.
 func splitServiceName(name string) (appName, environment string) {
-	knownEnvs := []string{"dev", "prod", "preview"}
+	knownEnvs := []string{"dev", "prod"}
+
+	// Check for PR preview pattern: {app}-pr-{number} or {app}-fe-pr-{number}
+	if idx := strings.Index(name, "-pr-"); idx > 0 {
+		base := name[:idx]
+		env := name[idx+1:] // "pr-123"
+		if strings.HasSuffix(base, "-fe") {
+			return strings.TrimSuffix(base, "-fe") + "-fe", env
+		}
+		return base, env
+	}
 
 	for _, env := range knownEnvs {
 		suffix := "-" + env
