@@ -1,0 +1,18 @@
+name: Deploy Dashboard
+
+on:
+  push:
+    branches: [main]
+    paths: ['dashboard/**', 'stackramp.yaml']
+  pull_request:
+    paths: ['dashboard/**', 'stackramp.yaml']
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    uses: bobbydeveaux/stackramp/.github/workflows/platform.yml@main
+    secrets: inherit

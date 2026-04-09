@@ -9,3 +9,7 @@
 **/backend.tf
 **/crash.log
 **/override.tf
+
+# Dashboard
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
