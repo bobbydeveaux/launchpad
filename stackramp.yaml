@@ -1,0 +1,15 @@
+name: stackramp-dashboard
+
+domain: dashboard.stackramp.io
+
+frontend:
+  framework: react
+  dir: dashboard/frontend
+  sso: true
+
+backend:
+  language: go
+  dir: dashboard/backend
+  sso: true
+
+database: false
