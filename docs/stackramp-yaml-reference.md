@@ -119,7 +119,7 @@ Omit this block or set `language: none` if your app has no backend.
 | | |
 |---|---|
 | Type | `string` |
-| Values | `python`, `go`, `node`, `none` |
+| Values | `python`, `go`, `node`, `rust`, `none` |
 | Default | `none` |
 
 The backend language. Determines which default Dockerfile to use if you don't provide your own.
@@ -127,6 +127,7 @@ The backend language. Determines which default Dockerfile to use if you don't pr
 - `python` — uses `uvicorn` with `requirements.txt`
 - `go` — builds `cmd/server` or root package
 - `node` — runs `index.js` or `src/index.js`
+- `rust` — multi-stage build with `cargo build --release`, binary name parsed from `Cargo.toml`
 
 You can override the default by placing a `Dockerfile` in your backend directory.
 

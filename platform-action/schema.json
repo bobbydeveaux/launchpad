@@ -33,7 +33,7 @@
       "properties": {
         "language": {
           "type": "string",
-          "enum": ["python", "go", "node", "none"],
+          "enum": ["python", "go", "node", "rust", "none"],
           "default": "none"
         },
         "dir": {

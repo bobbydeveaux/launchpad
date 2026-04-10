@@ -12,7 +12,7 @@ frontend:
   node_version: "20"   # optional, defaults to 20 (or reads .nvmrc)
 
 backend:
-  language: python     # python | go | node | none
+  language: python     # python | go | node | rust | none
   dir: backend         # directory containing your backend code (default: backend)
   port: 8080           # port your app listens on (default: 8080)
   memory: 512Mi        # Cloud Run memory (default: 512Mi)
