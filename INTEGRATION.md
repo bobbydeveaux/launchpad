@@ -56,6 +56,7 @@ frontend:
   framework: react            # react | vue | next | static | none
   dir: frontend               # directory containing your frontend (default: frontend)
   node_version: "20"          # node version, or use .nvmrc in frontend dir
+  sso: false                  # true to serve frontend behind Google IAP (default: false)
 
 backend:
   language: python            # python | go | node | none
@@ -63,11 +64,14 @@ backend:
   port: 8080                  # port your app listens on (default: 8080)
   memory: 512Mi               # Cloud Run memory (default: 512Mi)
   cpu: "1"                    # Cloud Run CPU (default: 1)
+  sso: false                  # true to put backend behind Google IAP (default: false)
 
 domain: my-app.yourdomain.com # optional custom domain
                               # omit for a .web.app Firebase URL
 
 database: false               # false | postgres | mysql (default: false)
+
+storage: false                # false | gcs (default: false)
 ```
 
 **Frontend-only example:**
@@ -113,6 +117,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 jobs:
@@ -125,7 +130,7 @@ jobs:
     secrets: inherit
 ```
 
-That's the entire deploy workflow. No further configuration needed in the app repo.
+That's the entire deploy workflow. No further configuration needed in the app repo. The `closed` type is needed so StackRamp can clean up preview environments when PRs are merged or closed.
 
 ---
 
@@ -145,22 +150,39 @@ push to main / PR opened
   provision (Terraform — idempotent)
   ┌─────────────────────────────────┐
   │ Firebase Hosting site           │
-  │ Custom domain + DNS CNAME       │
+  │ Custom domain + DNS records     │
   │ Cloud Run service shell         │
+  │ GCS bucket (if storage: gcs)    │
+  │ IAP + HTTPS LB (if sso: true)  │
   └─────────────────────────────────┘
         │
-        ├──────────────────────────────────┐
-        ▼                                  ▼
-  deploy-frontend                    deploy-backend
-  ┌──────────────────────┐           ┌──────────────────────┐
-  │ npm ci + npm build   │           │ docker build + push  │
-  │ firebase deploy      │           │ gcloud run deploy    │
-  │ (or preview channel  │           └──────────────────────┘
+        ▼
+  deploy-backend
+  ┌──────────────────────┐
+  │ docker build + push  │
+  │ gcloud run deploy    │
+  └──────────────────────┘
+        │
+        ▼
+  deploy-frontend
+  ┌──────────────────────┐
+  │ npm ci + npm build   │
+  │ firebase deploy      │
+  │ (or preview channel  │
   │  if PR)              │
   └──────────────────────┘
         │
         ▼ (main branch only, after dev succeeds)
   deploy-frontend-prod + deploy-backend-prod
+
+PR closed/merged
+        │
+        ▼
+  cleanup-preview
+  ┌──────────────────────────────┐
+  │ Delete Cloud Run pr-N service│
+  │ Delete Firebase preview chan │
+  └──────────────────────────────┘
 ```
 
 ### Branch behaviour
@@ -168,12 +190,13 @@ push to main / PR opened
 | Trigger | Environment | Frontend | Backend |
 |---|---|---|---|
 | `push` to `main` | `dev` then `prod` | Firebase live channel | Cloud Run |
-| Pull request | `preview` | Firebase preview channel | Cloud Run (preview env) |
-| `workflow_dispatch` | `dev` | Forces redeploy | Forces redeploy |
+| Pull request | `pr-{number}` | Firebase preview channel | Cloud Run (`{app}-pr-{number}`) |
+| PR closed/merged | — | Preview channel deleted | Cloud Run preview deleted |
+| `workflow_dispatch` | `dev` + `prod` | Forces redeploy | Forces redeploy |
 
 ### Change detection
 
-StackRamp uses `dorny/paths-filter` to skip unchanged components. If only the frontend changed, the backend job is skipped, and vice versa. `workflow_dispatch` bypasses this and redeploys everything.
+StackRamp uses `dorny/paths-filter` to skip unchanged components on pushes. If only the frontend changed, the backend job is skipped, and vice versa. PRs and `workflow_dispatch` bypass this and deploy everything — PRs need a full deployment so Firebase preview channels can wire API rewrites to the PR-scoped Cloud Run service.
 
 ---
 
@@ -213,9 +236,11 @@ The following env vars are injected into every Cloud Run service at deploy time:
 
 | Variable | Value |
 |---|---|
-| `ENVIRONMENT` | `dev` or `prod` |
+| `ENVIRONMENT` | `dev`, `prod`, or `pr-{number}` |
 | `APP_NAME` | Value of `name` in `stackramp.yaml` |
 | `FRONTEND_URL` | Firebase Hosting URL for the same environment |
+| `STORAGE_BUCKET` | GCS bucket name (only if `storage: gcs`) |
+| `DATABASE_SECRET_NAME` | Secret Manager secret name for DB URL (only if `database:` is set) |
 
 ---
 
@@ -275,9 +300,46 @@ The bootstrap creates the Secret Manager shells and provisions the IAP service i
 ## Pull Request Previews
 
 On every PR:
-- Frontend is deployed to a Firebase **preview channel** (isolated, time-limited URL)
+- Backend is deployed as a Cloud Run service named `{app}-pr-{number}` (e.g. `arcade-pr-21`)
+- Frontend is deployed to a Firebase preview channel scoped to `pr-{number}`
+- Firebase wires `/api/**` rewrites to the PR-scoped Cloud Run service, so the preview is fully functional
 - A comment is posted on the PR with the preview URL
-- Preview channels are scoped to `pr-{number}` and don't affect the live site
+- Preview channels auto-expire after 7 days, but StackRamp actively cleans up both Cloud Run services and Firebase channels when the PR is closed or merged
+- Multiple open PRs get independent preview environments (no collisions)
+
+> **Note:** The deploy workflow must include `pull_request: types: [opened, synchronize, reopened, closed]` for cleanup to trigger on PR close.
+
+---
+
+## GCS Storage
+
+Set `storage: gcs` in `stackramp.yaml` to provision a GCS bucket per environment.
+
+```yaml
+name: my-app
+
+backend:
+  language: python
+  dir: backend
+
+storage: gcs
+```
+
+The bucket name follows the convention `{project}-{app}-{env}` (e.g. `bj-platform-dev-my-app-dev`). The `STORAGE_BUCKET` env var is injected into the Cloud Run service at deploy time.
+
+---
+
+## Secrets
+
+Secrets stored in GCP Secret Manager are automatically injected into Cloud Run as environment variables. The platform injects any secrets matching the pattern `{app}-{env}-{secret-name}`.
+
+To add a secret for your app:
+```bash
+echo -n "my-secret-value" | gcloud secrets create my-app-dev-api-key \
+  --data-file=- --project=YOUR_PROJECT
+```
+
+The secret is available as the `API_KEY` env var in your Cloud Run service (the `{app}-{env}-` prefix is stripped).
 
 ---
 
@@ -292,7 +354,9 @@ Set at org level so all repos inherit them. None of these are secrets.
 | `STACKRAMP_WIF_PROVIDER` | `projects/123/locations/global/...` | Full WIF provider resource name (from bootstrap output) |
 | `STACKRAMP_SA_EMAIL` | `stackramp-cicd-sa@my-platform-dev.iam.gserviceaccount.com` | Platform CI/CD service account |
 | `STACKRAMP_DNS_ZONE` | `yourdomain-com` | Cloud DNS zone name — only needed for custom domains |
+| `STACKRAMP_BASE_DOMAIN` | `stackramp.io` | Base domain for auto-generating dev subdomains (e.g. `app.dev.stackramp.io`) |
 | `STACKRAMP_IAP_DOMAIN` | `bobbyjason.co.uk` | Google Workspace domain allowed through IAP — only needed for SSO apps. Omit to allow any Google account. |
+| `STACKRAMP_CLOUDSQL_CONNECTION` | `project:region:instance` | Cloud SQL connection name — only needed for database apps |
 
 ---
 
@@ -301,19 +365,23 @@ Set at org level so all repos inherit them. None of these are secrets.
 ```
 stackramp/
 ├── .github/workflows/
-│   ├── platform.yml          # Entry point — consuming repos reference this
-│   ├── _frontend.yml         # Reusable: Firebase Hosting deploy
-│   └── _backend.yml          # Reusable: Cloud Run build + deploy
+│   ├── platform.yml              # Entry point — consuming repos reference this
+│   ├── _frontend.yml             # Reusable: Firebase Hosting / Cloud Run (SSO) deploy
+│   ├── _backend.yml              # Reusable: Cloud Run build + deploy
+│   └── _cleanup-preview.yml      # Reusable: deletes PR preview resources on close
 ├── platform-action/
-│   ├── action.yml            # Parses stackramp.yaml, outputs config
-│   ├── schema.json           # stackramp.yaml JSON schema
+│   ├── action.yml                # Parses stackramp.yaml, outputs config
+│   ├── schema.json               # stackramp.yaml JSON schema
 │   └── dockerfiles/
 │       ├── python.Dockerfile
 │       ├── node.Dockerfile
 │       └── go.Dockerfile
+├── dashboard/                    # StackRamp monitoring dashboard (dogfooded)
+│   ├── backend/                  # Go API — lists Cloud Run services via GCP APIs
+│   └── frontend/                 # React dashboard with service status
 └── providers/gcp/terraform/
-    ├── bootstrap/            # One-time platform setup
-    └── platform/             # Per-app infra (run on every deploy)
+    ├── bootstrap/                # One-time platform setup
+    └── platform/                 # Per-app infra (run on every deploy)
 ```
 
 ---
