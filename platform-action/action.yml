@@ -24,7 +24,7 @@ outputs:
     description: "Whether the app has a backend"
     value: ${{ steps.parse.outputs.has_backend }}
   backend_language:
-    description: "Backend language (python, go, node, none)"
+    description: "Backend language (python, go, node, rust, none)"
     value: ${{ steps.parse.outputs.backend_language }}
   backend_dir:
     description: "Backend directory"
