@@ -30,7 +30,7 @@ output "artifact_registry_url" {
 
 output "dns_zone_nameservers" {
   description = "Nameservers to set at your domain registrar (only when base_domain is set)"
-  value       = var.base_domain != "" ? google_dns_managed_zone.platform[0].name_servers : []
+  value       = local.dns_zone_nameservers
 }
 
 output "cloudsql_connection_name" {
@@ -50,7 +50,7 @@ output "iap_enabled" {
 
 output "github_variables_summary" {
   description = "Copy these values to your GitHub org/repo Variables"
-  value = <<-EOT
+  value       = <<-EOT
 
     ┌──────────────────────────────────────────────────────────────────────┐
     │ Set these as GitHub Variables (Settings → Secrets and variables     │

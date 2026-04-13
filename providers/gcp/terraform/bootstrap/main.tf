@@ -131,13 +131,26 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 # ── Cloud DNS Zone ────────────────────────────────────────────────────────────
 # Manages DNS for the platform base domain (e.g. stackramp.io).
 # Set var.base_domain to enable. Leave empty to skip.
+# Set var.create_dns_zone = false if the zone already exists (e.g. created by
+# GCP domain registration) — StackRamp will look it up via a data source.
 
 resource "google_dns_managed_zone" "platform" {
-  count       = var.base_domain != "" ? 1 : 0
+  count       = var.base_domain != "" && var.create_dns_zone ? 1 : 0
   name        = replace(var.base_domain, ".", "-")
   dns_name    = "${var.base_domain}."
   description = "StackRamp platform domain"
   depends_on  = [google_project_service.apis]
+}
+
+data "google_dns_managed_zone" "existing" {
+  count   = var.base_domain != "" && !var.create_dns_zone ? 1 : 0
+  name    = replace(var.base_domain, ".", "-")
+  project = var.platform_project
+}
+
+locals {
+  dns_zone_name        = var.base_domain != "" ? replace(var.base_domain, ".", "-") : ""
+  dns_zone_nameservers = var.base_domain == "" ? [] : (var.create_dns_zone ? google_dns_managed_zone.platform[0].name_servers : data.google_dns_managed_zone.existing[0].name_servers)
 }
 
 data "google_project" "platform" {

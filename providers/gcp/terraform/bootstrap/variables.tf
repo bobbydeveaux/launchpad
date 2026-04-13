@@ -38,6 +38,12 @@ variable "base_domain" {
   default     = ""
 }
 
+variable "create_dns_zone" {
+  description = "Create a new Cloud DNS zone for base_domain. Set to false if the zone already exists in the project (e.g. created by domain registration)."
+  type        = bool
+  default     = true
+}
+
 variable "platform_secrets" {
   description = "Secret names to create in Secret Manager as platform-injectable. Values are set manually in the GCP Console after apply — never committed here."
   type        = list(string)
