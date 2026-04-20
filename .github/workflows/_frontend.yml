@@ -168,7 +168,7 @@ jobs:
             --region="${{ inputs.region }}"
             --platform=managed
             --port=$FRONTEND_PORT
-            --allow-unauthenticated
+            --no-allow-unauthenticated
             --ingress=all
             --project="${{ inputs.platform_project }}"
           )
