@@ -227,6 +227,36 @@ resource "google_iap_web_cloud_run_service_iam_member" "backend_access" {
   member                 = local.iap_member
 }
 
+# ── Custom domain mapping for SSO apps ────────────────────────────────────────
+# Cloud Run handles SSL automatically via the domain mapping.
+# DNS must have a CNAME pointing to ghs.googlehosted.com.
+
+resource "google_cloud_run_domain_mapping" "sso_frontend" {
+  count    = var.has_sso && var.custom_domain != "" ? 1 : 0
+  name     = var.custom_domain
+  location = var.region
+  project  = var.platform_project
+
+  metadata {
+    namespace = var.platform_project
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.frontend_sso[0].name
+  }
+}
+
+# DNS CNAME for SSO custom domain — points to ghs.googlehosted.com
+resource "google_dns_record_set" "sso_cname" {
+  count        = var.has_sso && var.custom_domain != "" && var.dns_zone_name != "" ? 1 : 0
+  name         = "${var.custom_domain}."
+  type         = "CNAME"
+  ttl          = 300
+  managed_zone = var.dns_zone_name
+  project      = var.platform_project
+  rrdatas      = ["ghs.googlehosted.com."]
+}
+
 # ── GCS Data Bucket (optional) ────────────────────────────────────────────────
 # When storage: gcs is declared in stackramp.yaml, provisions a persistent
 # data bucket and grants the Cloud Run service account access.

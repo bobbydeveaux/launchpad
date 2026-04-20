@@ -141,6 +141,7 @@ jobs:
           docker build \
             -t "$IMAGE" \
             -f "$DOCKERFILE" \
+            --build-arg BACKEND_URL="${{ inputs.backend_url }}" \
             ${{ inputs.frontend_dir }}/
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
