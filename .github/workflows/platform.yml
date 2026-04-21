@@ -276,6 +276,7 @@ jobs:
       database_secret_name: ${{ needs.provision.outputs.database_secret_name_dev }}
       min_instances: ${{ needs.parse-config.outputs.min_instances }}
       sso: ${{ needs.parse-config.outputs.has_sso }}
+      frontend_sa: ${{ vars.STACKRAMP_FRONTEND_SA || '' }}
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 4. Deploy to PROD (main branch only, after dev succeeds)
@@ -339,3 +340,4 @@ jobs:
       database_secret_name: ${{ needs.provision.outputs.database_secret_name_prod }}
       min_instances: ${{ needs.parse-config.outputs.min_instances }}
       sso: ${{ needs.parse-config.outputs.has_sso }}
+      frontend_sa: ${{ vars.STACKRAMP_FRONTEND_SA || '' }}
