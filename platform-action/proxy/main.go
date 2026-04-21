@@ -40,8 +40,13 @@ func main() {
 
 				// Fetch identity token from metadata server for service-to-service auth
 				token, err := fetchIdentityToken(target.String())
-				if err == nil && token != "" {
+				if err != nil {
+					log.Printf("WARNING: failed to fetch identity token: %v", err)
+				} else if token != "" {
+					log.Printf("Identity token fetched for audience: %s (len=%d)", target.String(), len(token))
 					req.Header.Set("Authorization", "Bearer "+token)
+				} else {
+					log.Printf("WARNING: empty identity token returned")
 				}
 			},
 		}
