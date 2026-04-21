@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const REFRESH_INTERVAL = 30000;
+const REFRESH_INTERVAL = 30000; // 30s auto-refresh
 
 function timeAgo(dateString) {
   if (!dateString) return "Unknown";

@@ -41,7 +41,7 @@ func main() {
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/services", handleServices)
 
-	log.Printf("dashboard backend listening on :%s", port)
+	log.Printf("dashboard backend v1.1.0 listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
