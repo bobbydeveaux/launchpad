@@ -22,7 +22,7 @@ print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_error()   { echo -e "${RED}❌ $1${NC}"; }
 
 # ── Validate environment ──────────────────────────────────────────────────────
-if [[ ! "$ENVIRONMENT" =~ ^(dev|prod)$ ]]; then
+if [[ ! "$ENVIRONMENT" =~ ^(dev|dev-tt|prod)$ ]]; then
     print_error "Invalid environment. Usage: $0 [dev|prod]"
     exit 1
 fi

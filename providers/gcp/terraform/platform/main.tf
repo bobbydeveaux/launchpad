@@ -122,7 +122,7 @@ resource "google_cloud_run_v2_service" "app" {
   location            = var.region
   project             = var.platform_project
   deletion_protection = false
-  iap_enabled         = var.has_sso
+  iap_enabled         = false
 
   template {
     containers {
@@ -157,6 +157,17 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   member   = "allUsers"
 }
 
+# Grant default compute SA invoker on backend — used by the Go proxy
+# to call the backend with an identity token (service-to-service auth)
+resource "google_cloud_run_v2_service_iam_member" "frontend_to_backend_invoker" {
+  count    = var.has_sso && var.has_backend ? 1 : 0
+  project  = var.platform_project
+  location = var.region
+  name     = google_cloud_run_v2_service.app[0].name
+  role     = "roles/run.invoker"
+  member   = var.frontend_sa_email != "" ? "serviceAccount:${var.frontend_sa_email}" : "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
 # ── SSO: IAP directly on Cloud Run (no load balancer) ────────────────────────
 # When sso: true — frontend served from Cloud Run (not Firebase Hosting),
 # IAP is enabled directly on each Cloud Run service. No LB required.
@@ -171,6 +182,7 @@ resource "google_cloud_run_v2_service" "frontend_sso" {
   iap_enabled         = true
 
   template {
+    service_account = var.frontend_sa_email != "" ? var.frontend_sa_email : null
     containers {
       image = "nginxinc/nginx-unprivileged:alpine"
       ports {
@@ -190,15 +202,6 @@ resource "google_cloud_run_v2_service" "frontend_sso" {
 }
 
 # IAP SA invoker — IAP service agent needs run.invoker to forward authed requests
-resource "google_cloud_run_v2_service_iam_member" "iap_backend_invoker" {
-  count    = var.has_sso && var.has_backend ? 1 : 0
-  project  = var.platform_project
-  location = var.region
-  name     = google_cloud_run_v2_service.app[0].name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
-}
-
 resource "google_cloud_run_v2_service_iam_member" "iap_frontend_invoker_sa" {
   count    = var.has_sso ? 1 : 0
   project  = var.platform_project
@@ -214,15 +217,6 @@ resource "google_iap_web_cloud_run_service_iam_member" "frontend_access" {
   project                = data.google_project.project.number
   location               = var.region
   cloud_run_service_name = google_cloud_run_v2_service.frontend_sso[0].name
-  role                   = "roles/iap.httpsResourceAccessor"
-  member                 = local.iap_member
-}
-
-resource "google_iap_web_cloud_run_service_iam_member" "backend_access" {
-  count                  = var.has_sso && var.has_backend ? 1 : 0
-  project                = data.google_project.project.number
-  location               = var.region
-  cloud_run_service_name = google_cloud_run_v2_service.app[0].name
   role                   = "roles/iap.httpsResourceAccessor"
   member                 = local.iap_member
 }

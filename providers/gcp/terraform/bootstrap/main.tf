@@ -106,6 +106,34 @@ resource "google_project_iam_member" "platform_roles" {
   member  = "serviceAccount:${google_service_account.platform_cicd.email}"
 }
 
+# ── Frontend Runtime Service Account (restrictive orgs only) ─────────────────
+# When postgres_private_ip=true (VPC/restrictive org), the Go proxy needs to
+# fetch identity tokens to call the backend. A custom SA with tokenCreator
+# on itself enables this. The default compute SA may be restricted by org policy.
+
+resource "google_service_account" "frontend_runtime" {
+  count        = var.postgres_private_ip ? 1 : 0
+  account_id   = "stackramp-frontend-sa"
+  display_name = "StackRamp Frontend Runtime"
+  description  = "SA for SSO frontend Cloud Run services — can generate identity tokens for backend calls"
+}
+
+# Allow the SA to generate identity tokens for itself
+resource "google_service_account_iam_member" "frontend_token_creator" {
+  count              = var.postgres_private_ip ? 1 : 0
+  service_account_id = google_service_account.frontend_runtime[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.frontend_runtime[0].email}"
+}
+
+# CI/CD SA needs to deploy Cloud Run services as this SA
+resource "google_service_account_iam_member" "cicd_can_act_as_frontend" {
+  count              = var.postgres_private_ip ? 1 : 0
+  service_account_id = google_service_account.frontend_runtime[0].name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.platform_cicd.email}"
+}
+
 # ── Workload Identity Federation ──────────────────────────────────────────────
 # ONE pool for the whole platform — all repos in the org can use it
 
@@ -211,12 +239,20 @@ resource "google_secret_manager_secret_iam_member" "platform_run_access" {
   member    = "serviceAccount:${data.google_project.platform.number}-compute@developer.gserviceaccount.com"
 }
 
+# Grant frontend SA access to platform secrets (restrictive orgs only)
+resource "google_secret_manager_secret_iam_member" "platform_frontend_sa_access" {
+  for_each  = var.postgres_private_ip ? toset(var.platform_secrets) : toset([])
+  secret_id = google_secret_manager_secret.platform[each.key].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.frontend_runtime[0].email}"
+}
+
 # ── VPC Network (for Cloud SQL private IP) ───────────────────────────────────
 # Cloud SQL with private IP requires a VPC with service networking peering.
 # Cloud Run connects via a Serverless VPC Access Connector.
 
 resource "google_compute_network" "platform" {
-  count                           = var.enable_postgres ? 1 : 0
+  count                           = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name                            = "stackramp-vpc-${var.environment}"
   project                         = local.platform_project
   routing_mode                    = "GLOBAL"
@@ -226,7 +262,7 @@ resource "google_compute_network" "platform" {
 }
 
 resource "google_compute_subnetwork" "platform" {
-  count                    = var.enable_postgres ? 1 : 0
+  count                    = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name                     = "stackramp-subnet-${var.environment}"
   project                  = local.platform_project
   region                   = var.region
@@ -236,7 +272,7 @@ resource "google_compute_subnetwork" "platform" {
 }
 
 resource "google_compute_global_address" "private_ip_range" {
-  count         = var.enable_postgres ? 1 : 0
+  count         = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name          = "stackramp-sql-private-ip-${var.environment}"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
@@ -245,14 +281,14 @@ resource "google_compute_global_address" "private_ip_range" {
 }
 
 resource "google_service_networking_connection" "private_vpc" {
-  count                   = var.enable_postgres ? 1 : 0
+  count                   = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   network                 = google_compute_network.platform[0].id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_range[0].name]
 }
 
 resource "google_vpc_access_connector" "platform" {
-  count         = var.enable_postgres ? 1 : 0
+  count         = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name          = "stackramp-vpc-${var.environment}"
   project       = local.platform_project
   region        = var.region
@@ -283,12 +319,12 @@ resource "google_sql_database_instance" "platform" {
     }
 
     ip_configuration {
-      ipv4_enabled    = false
-      private_network = google_compute_network.platform[0].id
+      ipv4_enabled    = !var.postgres_private_ip
+      private_network = var.postgres_private_ip ? google_compute_network.platform[0].id : null
     }
   }
 
-  deletion_protection = true
+  deletion_protection = false
   depends_on          = [google_service_networking_connection.private_vpc]
 }
 

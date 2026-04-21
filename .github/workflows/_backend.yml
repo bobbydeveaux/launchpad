@@ -70,11 +70,21 @@ on:
         required: false
         default: ""
         description: "Secret Manager secret ID holding DATABASE_URL for this app. Mounted directly into Cloud Run."
+      min_instances:
+        type: string
+        required: false
+        default: "0"
+        description: "Minimum number of Cloud Run instances to keep warm. Default 0 (scale to zero)."
       sso:
         type: string
         required: false
         default: "false"
-        description: "When true, Cloud Run is deployed without --allow-unauthenticated (IAP LB is the entry point)."
+        description: "When true, Cloud Run is deployed without --allow-unauthenticated (IAP handles auth)."
+      frontend_sa:
+        type: string
+        required: false
+        default: ""
+        description: "Frontend SA email — granted run.invoker on the backend after deploy (for SSO service-to-service auth)."
     outputs:
       url:
         description: "Deployed backend URL"
@@ -186,15 +196,23 @@ jobs:
             --set-env-vars="${ENV_VARS}"
             --memory="${{ inputs.memory }}"
             --cpu="${{ inputs.cpu }}"
-            --min-instances=1
+            --min-instances=${{ inputs.min_instances }}
             --max-instances=10
             --timeout=300
             --cpu-throttling
             --project="${{ inputs.platform_project }}"
           )
-          # SSO: IAP handles auth directly on Cloud Run — don't grant allUsers invoker
           if [ "${{ inputs.sso }}" = "true" ]; then
-            DEPLOY_FLAGS+=(--no-allow-unauthenticated --ingress=all)
+            if [ -n "${{ inputs.vpc_connector }}" ]; then
+              # Restrictive org: VPC handles network isolation. allow-unauthenticated
+              # avoids a read-modify-write that can race with Terraform IAM bindings
+              # (org policy silently blocks allUsers anyway).
+              DEPLOY_FLAGS+=(--allow-unauthenticated --ingress=internal)
+            else
+              # Permissive org: lock backend to authenticated callers only.
+              # Frontend SA is granted run.invoker after deploy for service-to-service auth.
+              DEPLOY_FLAGS+=(--no-allow-unauthenticated --ingress=all)
+            fi
           else
             DEPLOY_FLAGS+=(--allow-unauthenticated --ingress=all)
           fi
@@ -203,6 +221,18 @@ jobs:
           [ -n "${{ inputs.cloudsql_connection_name }}" ] && DEPLOY_FLAGS+=(--add-cloudsql-instances="${{ inputs.cloudsql_connection_name }}")
 
           gcloud run deploy "$SERVICE_NAME" "${DEPLOY_FLAGS[@]}"
+
+      - name: Grant frontend SA invoker on backend (SSO)
+        if: inputs.sso == 'true' && inputs.frontend_sa != ''
+        run: |
+          SERVICE_NAME="${{ inputs.app_name }}-${{ inputs.environment }}"
+          echo "Granting ${{ inputs.frontend_sa }} run.invoker on ${SERVICE_NAME}"
+          gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+            --region="${{ inputs.region }}" \
+            --project="${{ inputs.platform_project }}" \
+            --member="serviceAccount:${{ inputs.frontend_sa }}" \
+            --role="roles/run.invoker" \
+            --quiet
 
       - name: Get deployed URL
         id: url

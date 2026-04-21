@@ -56,6 +56,12 @@ variable "enable_postgres" {
   default     = false
 }
 
+variable "postgres_private_ip" {
+  description = "Use private IP for Cloud SQL (requires VPC connector at ~£52/month). When false, Cloud SQL uses public IP with Cloud SQL Auth Proxy — no VPC needed."
+  type        = bool
+  default     = false
+}
+
 variable "postgres_tier" {
   description = "Cloud SQL machine tier for the shared Postgres instance."
   type        = string
