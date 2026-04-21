@@ -216,7 +216,7 @@ resource "google_secret_manager_secret_iam_member" "platform_run_access" {
 # Cloud Run connects via a Serverless VPC Access Connector.
 
 resource "google_compute_network" "platform" {
-  count                           = var.enable_postgres ? 1 : 0
+  count                           = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name                            = "stackramp-vpc-${var.environment}"
   project                         = local.platform_project
   routing_mode                    = "GLOBAL"
@@ -226,7 +226,7 @@ resource "google_compute_network" "platform" {
 }
 
 resource "google_compute_subnetwork" "platform" {
-  count                    = var.enable_postgres ? 1 : 0
+  count                    = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name                     = "stackramp-subnet-${var.environment}"
   project                  = local.platform_project
   region                   = var.region
@@ -236,7 +236,7 @@ resource "google_compute_subnetwork" "platform" {
 }
 
 resource "google_compute_global_address" "private_ip_range" {
-  count         = var.enable_postgres ? 1 : 0
+  count         = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name          = "stackramp-sql-private-ip-${var.environment}"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
@@ -245,14 +245,14 @@ resource "google_compute_global_address" "private_ip_range" {
 }
 
 resource "google_service_networking_connection" "private_vpc" {
-  count                   = var.enable_postgres ? 1 : 0
+  count                   = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   network                 = google_compute_network.platform[0].id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_range[0].name]
 }
 
 resource "google_vpc_access_connector" "platform" {
-  count         = var.enable_postgres ? 1 : 0
+  count         = var.enable_postgres && var.postgres_private_ip ? 1 : 0
   name          = "stackramp-vpc-${var.environment}"
   project       = local.platform_project
   region        = var.region
@@ -283,12 +283,12 @@ resource "google_sql_database_instance" "platform" {
     }
 
     ip_configuration {
-      ipv4_enabled    = false
-      private_network = google_compute_network.platform[0].id
+      ipv4_enabled    = !var.postgres_private_ip
+      private_network = var.postgres_private_ip ? google_compute_network.platform[0].id : null
     }
   }
 
-  deletion_protection = true
+  deletion_protection = false
   depends_on          = [google_service_networking_connection.private_vpc]
 }
 

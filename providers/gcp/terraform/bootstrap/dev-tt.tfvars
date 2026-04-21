@@ -11,7 +11,8 @@ platform_secrets = [
   "YOUTUBE_API_KEY",
 ]
 
-enable_postgres = true
-postgres_tier = "db-f1-micro"
+enable_postgres    = true
+postgres_private_ip = true
+postgres_tier      = "db-f1-micro"
 
 iap_allowed_domain = "toucanberry.com"
