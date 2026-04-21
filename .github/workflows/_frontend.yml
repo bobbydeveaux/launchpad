@@ -61,6 +61,11 @@ on:
         required: false
         default: ""
         description: "VPC connector name — when set, frontend routes all traffic through VPC for internal backend access."
+      frontend_sa:
+        type: string
+        required: false
+        default: ""
+        description: "Custom service account for SSO frontend Cloud Run (for orgs that restrict default compute SA)."
     outputs:
       url:
         description: "Deployed frontend URL"
@@ -190,6 +195,7 @@ jobs:
             --project="${{ inputs.platform_project }}"
           )
           [ -n "$SECRET_REFS" ] && DEPLOY_FLAGS+=(--set-secrets="$SECRET_REFS")
+          [ -n "${{ inputs.frontend_sa }}" ] && DEPLOY_FLAGS+=(--service-account="${{ inputs.frontend_sa }}")
           if [ -n "${{ inputs.vpc_connector }}" ]; then
             DEPLOY_FLAGS+=(--vpc-connector="${{ inputs.vpc_connector }}" --vpc-egress=all-traffic)
             # Go proxy reads BACKEND_URL at runtime

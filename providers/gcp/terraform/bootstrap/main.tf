@@ -106,6 +106,34 @@ resource "google_project_iam_member" "platform_roles" {
   member  = "serviceAccount:${google_service_account.platform_cicd.email}"
 }
 
+# ── Frontend Runtime Service Account (restrictive orgs only) ─────────────────
+# When postgres_private_ip=true (VPC/restrictive org), the Go proxy needs to
+# fetch identity tokens to call the backend. A custom SA with tokenCreator
+# on itself enables this. The default compute SA may be restricted by org policy.
+
+resource "google_service_account" "frontend_runtime" {
+  count        = var.postgres_private_ip ? 1 : 0
+  account_id   = "stackramp-frontend-sa"
+  display_name = "StackRamp Frontend Runtime"
+  description  = "SA for SSO frontend Cloud Run services — can generate identity tokens for backend calls"
+}
+
+# Allow the SA to generate identity tokens for itself
+resource "google_service_account_iam_member" "frontend_token_creator" {
+  count              = var.postgres_private_ip ? 1 : 0
+  service_account_id = google_service_account.frontend_runtime[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.frontend_runtime[0].email}"
+}
+
+# CI/CD SA needs to deploy Cloud Run services as this SA
+resource "google_service_account_iam_member" "cicd_can_act_as_frontend" {
+  count              = var.postgres_private_ip ? 1 : 0
+  service_account_id = google_service_account.frontend_runtime[0].name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.platform_cicd.email}"
+}
+
 # ── Workload Identity Federation ──────────────────────────────────────────────
 # ONE pool for the whole platform — all repos in the org can use it
 

@@ -67,6 +67,12 @@ variable "has_sso" {
   default     = false
 }
 
+variable "frontend_sa_email" {
+  description = "Custom SA for SSO frontend Cloud Run services. When set, frontend runs as this SA instead of default compute SA."
+  type        = string
+  default     = ""
+}
+
 variable "iap_allowed_domain" {
   description = "Google Workspace domain for IAP access (e.g. yourcompany.com). Use * for allAuthenticatedUsers. Sourced from STACKRAMP_IAP_DOMAIN."
   type        = string

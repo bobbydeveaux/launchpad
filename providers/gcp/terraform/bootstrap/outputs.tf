@@ -48,6 +48,11 @@ output "vpc_connector_name" {
   value       = var.enable_postgres && var.postgres_private_ip ? google_vpc_access_connector.platform[0].name : ""
 }
 
+output "frontend_sa_email" {
+  description = "Frontend runtime SA email (only when postgres_private_ip = true)"
+  value       = var.postgres_private_ip ? google_service_account.frontend_runtime[0].email : ""
+}
+
 output "iap_enabled" {
   description = "Whether IAP was configured (iap_allowed_domain was set)"
   value       = var.iap_allowed_domain != ""

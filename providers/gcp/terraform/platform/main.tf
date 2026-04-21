@@ -165,7 +165,7 @@ resource "google_cloud_run_v2_service_iam_member" "frontend_to_backend_invoker" 
   location = var.region
   name     = google_cloud_run_v2_service.app[0].name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  member   = var.frontend_sa_email != "" ? "serviceAccount:${var.frontend_sa_email}" : "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
 # ── SSO: IAP directly on Cloud Run (no load balancer) ────────────────────────
@@ -182,6 +182,7 @@ resource "google_cloud_run_v2_service" "frontend_sso" {
   iap_enabled         = true
 
   template {
+    service_account = var.frontend_sa_email != "" ? var.frontend_sa_email : null
     containers {
       image = "nginxinc/nginx-unprivileged:alpine"
       ports {

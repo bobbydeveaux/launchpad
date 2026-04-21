@@ -155,7 +155,8 @@ jobs:
             -var=has_database=${{ needs.parse-config.outputs.has_database == 'true' }} \
             -var=cloudsql_connection_name=${{ vars.STACKRAMP_CLOUDSQL_CONNECTION || '' }} \
             -var=has_sso=${HAS_SSO} \
-            -var=iap_allowed_domain=${{ vars.STACKRAMP_IAP_DOMAIN || '' }}"
+            -var=iap_allowed_domain=${{ vars.STACKRAMP_IAP_DOMAIN || '' }} \
+            -var=frontend_sa_email=${{ vars.STACKRAMP_FRONTEND_SA || '' }}"
 
           terraform apply -auto-approve $TF_VARS
 
@@ -198,7 +199,8 @@ jobs:
             -var=has_database=${{ needs.parse-config.outputs.has_database == 'true' }} \
             -var=cloudsql_connection_name=${{ vars.STACKRAMP_CLOUDSQL_CONNECTION || '' }} \
             -var=has_sso=${HAS_SSO} \
-            -var=iap_allowed_domain=${{ vars.STACKRAMP_IAP_DOMAIN || '' }}"
+            -var=iap_allowed_domain=${{ vars.STACKRAMP_IAP_DOMAIN || '' }} \
+            -var=frontend_sa_email=${{ vars.STACKRAMP_FRONTEND_SA || '' }}"
 
           terraform apply -auto-approve $TF_VARS
 
@@ -243,6 +245,7 @@ jobs:
       sso: ${{ needs.parse-config.outputs.has_sso }}
       custom_domain: ${{ needs.parse-config.outputs.custom_domain }}
       vpc_connector: ${{ vars.STACKRAMP_VPC_CONNECTOR || '' }}
+      frontend_sa: ${{ vars.STACKRAMP_FRONTEND_SA || '' }}
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 3. Deploy backend (if changed)
@@ -305,6 +308,7 @@ jobs:
       sso: ${{ needs.parse-config.outputs.has_sso }}
       custom_domain: ${{ needs.parse-config.outputs.custom_domain }}
       vpc_connector: ${{ vars.STACKRAMP_VPC_CONNECTOR || '' }}
+      frontend_sa: ${{ vars.STACKRAMP_FRONTEND_SA || '' }}
 
   deploy-backend-prod:
     name: Backend → prod
