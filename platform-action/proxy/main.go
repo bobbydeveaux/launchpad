@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -27,47 +26,59 @@ func main() {
 	// Serve static files from /app/dist
 	fs := http.FileServer(http.Dir("/app/dist"))
 
-	// /api/* proxy to backend
+	// /api/* proxy to backend — manual HTTP request to rule out ReverseProxy issues
 	if backendURL != "" {
-		target, err := url.Parse(backendURL)
-		if err != nil {
-			log.Fatalf("invalid BACKEND_URL: %v", err)
-		}
+		mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+			// Build target URL
+			targetURL := backendURL + r.URL.Path
+			if r.URL.RawQuery != "" {
+				targetURL += "?" + r.URL.RawQuery
+			}
 
-		proxy := &httputil.ReverseProxy{
-			Director: func(req *http.Request) {
-				req.URL.Scheme = target.Scheme
-				req.URL.Host = target.Host
-				req.Host = target.Host
+			// Fetch identity token
+			token, err := fetchIdentityToken(backendURL)
+			if err != nil {
+				log.Printf("ERROR: failed to fetch identity token: %v", err)
+				http.Error(w, "proxy error: "+err.Error(), 502)
+				return
+			}
+			logJWTClaims(token)
 
-				// Fetch identity token from metadata server for service-to-service auth
-				token, err := fetchIdentityToken(target.String())
-				if err != nil {
-					log.Printf("WARNING: failed to fetch identity token: %v", err)
-				} else if token != "" {
-					// Decode JWT claims for debugging
-					logJWTClaims(token)
-					req.Header.Set("Authorization", "Bearer "+token)
-				} else {
-					log.Printf("WARNING: empty identity token returned")
+			// Create new request
+			proxyReq, err := http.NewRequest(r.Method, targetURL, r.Body)
+			if err != nil {
+				http.Error(w, "proxy error: "+err.Error(), 502)
+				return
+			}
+			proxyReq.Header.Set("Authorization", "Bearer "+token)
+			proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+			log.Printf("Proxying %s %s -> %s (token len=%d)", r.Method, r.URL.Path, targetURL, len(token))
+
+			// Send request
+			resp, err := http.DefaultClient.Do(proxyReq)
+			if err != nil {
+				log.Printf("ERROR: backend request failed: %v", err)
+				http.Error(w, "proxy error: "+err.Error(), 502)
+				return
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			log.Printf("Backend response: %d (len=%d)", resp.StatusCode, len(body))
+			if resp.StatusCode >= 400 {
+				log.Printf("Backend %d body: %.500s", resp.StatusCode, string(body))
+			}
+
+			// Forward response
+			for k, v := range resp.Header {
+				for _, vv := range v {
+					w.Header().Add(k, vv)
 				}
-			},
-			ModifyResponse: func(resp *http.Response) error {
-				if resp.StatusCode >= 400 {
-					log.Printf("Backend responded %d for %s %s", resp.StatusCode, resp.Request.Method, resp.Request.URL.Path)
-					if resp.StatusCode == 401 || resp.StatusCode == 403 {
-						body, _ := io.ReadAll(resp.Body)
-						resp.Body.Close()
-						log.Printf("Backend %d body: %.500s", resp.StatusCode, string(body))
-						resp.Body = io.NopCloser(strings.NewReader(string(body)))
-						resp.ContentLength = int64(len(body))
-					}
-				}
-				return nil
-			},
-		}
-
-		mux.Handle("/api/", proxy)
+			}
+			w.WriteHeader(resp.StatusCode)
+			w.Write(body)
+		})
 	}
 
 	// SPA catch-all: serve index.html for all non-file routes
@@ -93,7 +104,6 @@ func logJWTClaims(token string) {
 		log.Printf("WARNING: token is not a valid JWT (parts=%d)", len(parts))
 		return
 	}
-	// Decode the payload (second part)
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		log.Printf("WARNING: failed to decode JWT payload: %v", err)
@@ -108,13 +118,10 @@ func logJWTClaims(token string) {
 }
 
 // fetchIdentityToken gets an identity token from the GCE metadata server.
-// Only works on Cloud Run / GCE / GKE.
 func fetchIdentityToken(audience string) (string, error) {
-	// NOTE: Do NOT url.QueryEscape the audience — the metadata server expects
-	// the raw URL and will set the aud claim to exactly what is passed.
 	metaURL := fmt.Sprintf(
 		"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=%s",
-		audience,
+		url.QueryEscape(audience),
 	)
 	req, err := http.NewRequest("GET", metaURL, nil)
 	if err != nil {
