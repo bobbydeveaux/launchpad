@@ -14,6 +14,7 @@ import (
 	run "cloud.google.com/go/run/apiv2"
 	runpb "cloud.google.com/go/run/apiv2/runpb"
 	"google.golang.org/api/dns/v1"
+	firebasehosting "google.golang.org/api/firebasehosting/v1beta1"
 	"google.golang.org/api/iterator"
 )
 
@@ -66,6 +67,23 @@ func handleServices(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to list services: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Also list Firebase Hosting sites (best-effort), skipping any that
+	// already appear as Cloud Run services to avoid duplicate rows.
+	fbSites, err := listFirebaseSites(ctx, projectID)
+	if err != nil {
+		log.Printf("warning: could not list Firebase Hosting sites: %v", err)
+	} else {
+		existing := make(map[string]bool)
+		for _, s := range services {
+			existing[s.Name+"/"+s.Environment] = true
+		}
+		for _, fb := range fbSites {
+			if !existing[fb.Name+"/"+fb.Environment] {
+				services = append(services, fb)
+			}
+		}
 	}
 
 	// Look up custom domains from Cloud DNS (best-effort — don't fail if DNS lookup errors)
@@ -257,6 +275,55 @@ func extractSegment(resource, key string) string {
 		}
 	}
 	return ""
+}
+
+// listFirebaseSites lists Firebase Hosting sites and converts them to ServiceInfo items.
+func listFirebaseSites(ctx context.Context, projectID string) ([]ServiceInfo, error) {
+	svc, err := firebasehosting.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating Firebase Hosting client: %w", err)
+	}
+
+	resp, err := svc.Projects.Sites.List("projects/" + projectID).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("listing sites: %w", err)
+	}
+
+	var services []ServiceInfo
+	for _, site := range resp.Sites {
+		siteID := lastSegment(site.Name) // "projects/P/sites/SITE_ID" → "SITE_ID"
+		appName, env := splitSiteID(siteID)
+		if appName == "" {
+			continue
+		}
+
+		services = append(services, ServiceInfo{
+			Name:         appName,
+			Service:      siteID,
+			Environment:  env,
+			Status:       "Ready",
+			URL:          site.DefaultUrl,
+			Region:       "firebase",
+		})
+	}
+
+	return services, nil
+}
+
+// splitSiteID parses a Firebase Hosting site ID like "{app}-{suffix}-{env}".
+func splitSiteID(siteID string) (appName, environment string) {
+	for _, env := range []string{"dev", "prod"} {
+		suffix := "-" + env
+		if strings.HasSuffix(siteID, suffix) {
+			base := strings.TrimSuffix(siteID, suffix)
+			// Strip the random suffix (last segment after the last dash)
+			if idx := strings.LastIndex(base, "-"); idx > 0 {
+				return base[:idx], env
+			}
+			return base, env
+		}
+	}
+	return "", ""
 }
 
 // buildDomainMap queries Cloud DNS and returns a map of domain → domain (all A/CNAME records in the zone).
