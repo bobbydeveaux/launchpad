@@ -43,11 +43,30 @@ func main() {
 				if err != nil {
 					log.Printf("WARNING: failed to fetch identity token: %v", err)
 				} else if token != "" {
-					log.Printf("Identity token fetched for audience: %s (len=%d)", target.String(), len(token))
+					// Verify token looks like a JWT (base64url-encoded JSON header)
+					if strings.HasPrefix(token, "eyJ") {
+						log.Printf("Identity token OK for %s (len=%d)", target.Host, len(token))
+					} else {
+						log.Printf("WARNING: token does not look like a JWT, first 50 chars: %.50s", token)
+					}
 					req.Header.Set("Authorization", "Bearer "+token)
 				} else {
 					log.Printf("WARNING: empty identity token returned")
 				}
+			},
+			ModifyResponse: func(resp *http.Response) error {
+				if resp.StatusCode >= 400 {
+					log.Printf("Backend responded %d for %s %s", resp.StatusCode, resp.Request.Method, resp.Request.URL.Path)
+					if resp.StatusCode == 401 || resp.StatusCode == 403 {
+						body, _ := io.ReadAll(resp.Body)
+						resp.Body.Close()
+						log.Printf("Backend %d body: %.500s", resp.StatusCode, string(body))
+						// Re-create body for the client
+						resp.Body = io.NopCloser(strings.NewReader(string(body)))
+						resp.ContentLength = int64(len(body))
+					}
+				}
+				return nil
 			},
 		}
 
@@ -73,11 +92,11 @@ func main() {
 // fetchIdentityToken gets an identity token from the GCE metadata server.
 // Only works on Cloud Run / GCE / GKE.
 func fetchIdentityToken(audience string) (string, error) {
-	url := fmt.Sprintf(
+	metaURL := fmt.Sprintf(
 		"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=%s",
-		audience,
+		url.QueryEscape(audience),
 	)
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", metaURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -93,5 +112,10 @@ func fetchIdentityToken(audience string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("metadata server returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
 	return strings.TrimSpace(string(body)), nil
 }
