@@ -42,6 +42,7 @@ backend:
 
 database: false
 storage: gcs        # optional — provisions a GCS bucket
+migrate: false      # optional — "alembic upgrade head", true (language default), or false
 ```
 
 ### Step 3: Add one workflow file
@@ -207,9 +208,10 @@ Custom `Dockerfile` in your backend directory is always supported as an override
 - [x] GCS storage bucket support
 - [x] Cloud SQL (Postgres) with `DATABASE_URL` injected via Secret Manager
 - [x] Platform secrets auto-injected from Secret Manager (label-based)
-- [x] SSO via GCP IAP — Global HTTPS LB + Identity-Aware Proxy, opt-in per app
+- [x] SSO via GCP IAP — native Cloud Run IAP + Go reverse proxy for service-to-service auth
 - [x] PR preview environments — isolated per PR, auto-cleanup on close
 - [x] Deploy status dashboard — dogfooded on the platform at dashboard.stackramp.io
+- [x] Database migrations via Cloud Run Jobs — runs once per deploy, before traffic shifts
 - [ ] AWS provider
 - [ ] Documentation website
 
