@@ -141,6 +141,7 @@ resource "google_cloud_run_v2_service" "app" {
 
   lifecycle {
     ignore_changes = [
+      client,
       client_version,
       template,
     ]
@@ -196,6 +197,7 @@ resource "google_cloud_run_v2_service" "frontend_sso" {
 
   lifecycle {
     ignore_changes = [
+      client,
       client_version,
       template,
     ]
