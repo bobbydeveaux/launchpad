@@ -22,6 +22,13 @@ moved {
   to   = google_cloud_run_v2_service.app[0]
 }
 
+# SSO and non-SSO subdomain CNAMEs were merged into a single resource (frontend_cname)
+# to make SSO transitions an in-place update instead of a destroy/create race.
+moved {
+  from = google_dns_record_set.sso_cname[0]
+  to   = google_dns_record_set.frontend_cname[0]
+}
+
 # StackRamp Per-App Infrastructure
 # Run idempotently on every deploy to ensure app infra exists.
 # Creates Firebase Hosting site + Cloud Run service for the app.
@@ -80,19 +87,22 @@ resource "google_firebase_hosting_custom_domain" "app" {
 # first apply (TXT only) and subsequent applies (TXT + A) are both safe.
 
 locals {
-  # Firebase DNS (non-SSO only)
-  dns_enabled          = !var.has_sso && var.custom_domain != "" && var.dns_zone_name != ""
+  dns_enabled          = var.custom_domain != "" && var.dns_zone_name != ""
   cloudsql_instance_id = var.has_database && var.cloudsql_connection_name != "" ? split(":", var.cloudsql_connection_name)[2] : ""
   is_subdomain         = local.dns_enabled && length(split(".", var.custom_domain)) > 2
   firebase_a_records   = ["199.36.158.100", "199.36.158.101"]
+
+  # Subdomain CNAME target — Cloud Run domain mapping for SSO apps, Firebase site for Firebase apps
+  cname_target = var.has_sso ? "ghs.googlehosted.com." : (length(google_firebase_hosting_site.app) > 0 ? "${google_firebase_hosting_site.app[0].site_id}.web.app." : "")
 
   # IAP member — domain:example.com or allAuthenticatedUsers
   iap_member = (var.iap_allowed_domain == "" || var.iap_allowed_domain == "*") ? "allAuthenticatedUsers" : "domain:${var.iap_allowed_domain}"
 }
 
-# Apex domain: A records pointing at Firebase's stable load-balancer IPs
+# Apex domain: A records pointing at Firebase's stable load-balancer IPs (non-SSO only).
+# SSO apps use Cloud Run Domain Mapping which doesn't support apex domains.
 resource "google_dns_record_set" "frontend_a" {
-  count        = local.dns_enabled && !local.is_subdomain ? 1 : 0
+  count        = local.dns_enabled && !local.is_subdomain && !var.has_sso ? 1 : 0
   name         = "${var.custom_domain}."
   type         = "A"
   ttl          = 300
@@ -101,8 +111,8 @@ resource "google_dns_record_set" "frontend_a" {
   rrdatas      = local.firebase_a_records
 }
 
-# Subdomain: CNAME to the Firebase Hosting site — Firebase verifies ownership
-# and issues SSL via the web.app domain it already controls
+# Subdomain CNAME — single resource so transitioning between Firebase and SSO Cloud Run
+# is an in-place update (changed rrdatas), avoiding a destroy/create DNS race condition.
 resource "google_dns_record_set" "frontend_cname" {
   count        = local.is_subdomain ? 1 : 0
   name         = "${var.custom_domain}."
@@ -110,7 +120,7 @@ resource "google_dns_record_set" "frontend_cname" {
   ttl          = 300
   managed_zone = var.dns_zone_name
   project      = var.platform_project
-  rrdatas      = ["${google_firebase_hosting_site.app[0].site_id}.web.app."]
+  rrdatas      = [local.cname_target]
 }
 
 # ── Cloud Run Service ─────────────────────────────────────────────────────────
@@ -241,17 +251,6 @@ resource "google_cloud_run_domain_mapping" "sso_frontend" {
   spec {
     route_name = google_cloud_run_v2_service.frontend_sso[0].name
   }
-}
-
-# DNS CNAME for SSO custom domain — points to ghs.googlehosted.com
-resource "google_dns_record_set" "sso_cname" {
-  count        = var.has_sso && var.custom_domain != "" && var.dns_zone_name != "" ? 1 : 0
-  name         = "${var.custom_domain}."
-  type         = "CNAME"
-  ttl          = 300
-  managed_zone = var.dns_zone_name
-  project      = var.platform_project
-  rrdatas      = ["ghs.googlehosted.com."]
 }
 
 # ── GCS Data Bucket (optional) ────────────────────────────────────────────────
